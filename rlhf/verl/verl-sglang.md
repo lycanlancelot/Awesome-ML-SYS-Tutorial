@@ -4,7 +4,7 @@
 
 对于 veRL 而言，inference engine 需要支持 SPMD，具体的 motivation 可以参考此[链接](https://github.com/vllm-project/vllm/issues/11400)。SGLang 团队已经 merge 了相关 PR，可以参考[此处](https://github.com/sgl-project/sglang/commit/e3e0bc50a9d9644a183bc6dbb55919232196971d)。
 
-这是  veRL 团队和 SGLang 团队开发的 dev release，旨在将 SGLang 接入 veRL 的训练流程中。目前虽然落后主分支有一定距离，但是会在近期完成合并，欢迎大家尝鲜、体验并且提供反馈。
+这是  veRL 团队和 SGLang 团队开发的 dev release，旨在将 SGLang 接入 veRL 的训练流程中。会在近期完成合并，欢迎大家尝鲜、体验并且提供反馈。
 
 ## 环境配置
 
@@ -92,7 +92,7 @@ export LD_LIBRARY_PATH=/data/chayenne/.python/verl-sglang/lib64/python3.10/site-
 - ray 2.43.0
 - flash-attn 2.7.4.post1  
 
-### 安装 megatron 作为 veRL 的 training engine
+<!-- ### 安装 megatron 作为 veRL 的 training engine
 
 veRL 目前也支持使用 Megatron 作为 training engine，使用下面的命令安装 dev 版本的 megatron：
 
@@ -140,9 +140,9 @@ sudo apt update
 sudo apt install gcc-13 g++-13
 sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 60
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 60
-```
+``` -->
 
-## 测试 PPO 功能
+## 4 卡测试 PPO 功能
 
 首先构造数据集，默认保存至 `~/data`。
 
@@ -151,9 +151,14 @@ python3 examples/data_preprocess/gsm8k.py
 python3 examples/data_preprocess/math_dataset.py
 ```
 
-可以在 4 卡 GPU 上直接运行 `bash test_sglang.sh` 测试 SGLang 的 PPO 功能。
+可以在 4 卡 GPU 上直接运行测试 SGLang 的 PPO 功能：
 
-## 对拍 SGLang 和 vLLM
+```bash
+export CUDA_VISIBLE_DEVICES=0,1,2,3
+bash examples/ppo_trainer/test_sglang.sh
+```
+
+## 8 卡对拍 SGLang 和 vLLM
 
 ### SGLang
 
@@ -201,7 +206,7 @@ mkdir log
 bash ~/verl-sglang/examples/ppo_trainer/rollout_callibration.sh vllm $(now)
 ```
 
-## 和vLLM采样对齐  
+<!-- ## 和vLLM采样对齐  
 目前使用SGLang时会出现第一个iter开始score就非常低的现象，下图是在gsm8k上进行对拍的结果，其中两条高的线是vllm，剩下的是SGLang
 ![image](https://github.com/user-attachments/assets/e7d8c370-a9b6-40c7-85ba-c06ff1228592)、
 
@@ -223,4 +228,4 @@ SGLang:
 do_sample: {'n': 1, 'max_new_tokens': 4096, 'temperature': 1.0, 'top_k': -1, 'top_p': 1, 'ignore_eos': False, 'repetition_penalty': 1.0}  
 
 !do_sample: {'n': 1, 'max_new_tokens': 4096, 'temperature': 0, 'top_k': -1, 'top_p': 1.0, 'ignore_eos': False, 'repetition_penalty': 1.0}  
-</details>
+</details> -->
