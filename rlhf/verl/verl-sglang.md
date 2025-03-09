@@ -184,7 +184,7 @@ bash examples/ppo_trainer/rollout_callibration.sh sglang $(now)
 
 ### vLLM
 
-注意，vllm 和 sglang 是有依赖冲突的，直接从 verl main branch 安装 vllm 依赖的 verl，然后进行对拍。这里实际上参考了 verl 的[官方文档](https://github.com/volcengine/verl/blob/main/docs/README_vllm0.7.md)。
+注意，vllm 和 sglang 是有依赖冲突的，直接从 verl main branch 安装 vllm 依赖的 verl，然后进行对拍。这里用的是 vllm 0.6.3。
 
 ```bash
 cd ~
@@ -195,7 +195,6 @@ python3 -m pip install --upgrade uv
 git clone https://github.com/volcengine/verl.git
 cd verl
 python3 -m uv pip install .
-python3 -m uv pip install vllm==0.7.3
 python3 -m uv pip install flash-attn --no-build-isolation
 ```
 
