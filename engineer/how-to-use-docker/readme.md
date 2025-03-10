@@ -7,7 +7,7 @@ Docker 是一个软件。它能把环境打包成**镜像(image)**。使用者�
 
 ## 2. 安装 docker
 
-请注意，sglang 默认的开发环境是 linux 系统 [Ques: Is this correct?]
+请注意，sglang 的开发环境是 linux 系统
 
 - 通常来讲，服务器管理员会预先安装 docker 软件，无需手动安装。你并不需要 sudo 权限来装软件
 
@@ -19,7 +19,7 @@ Docker 是一个软件。它能把环境打包成**镜像(image)**。使用者�
 
 绝大多数 docker 镜像被发布在 [Docker Hub ](https://hub.docker.com/)
 
-请使用 sglang 官方镜像  [lmsysorg/sglang Tags | Docker Hub](https://hub.docker.com/r/lmsysorg/sglang/tags) 
+请使用 sglang 官方镜像 [lmsysorg/sglang Tags | Docker Hub](https://hub.docker.com/r/lmsysorg/sglang/tags) 
 
 ```
 # 下载镜像
@@ -95,11 +95,8 @@ docker run -it --name <container-name> --shm-size 16g --gpus all -v <host-path>:
 
 ### 4.3 IMAGE
 
-[Ques: Is this correct?]
-
 - 使用者：`docker pull lmsysorg/sglang:latest`
 - 开发者：`docker pull lmsysorg/sglang:dev`
-- 只有后端：`docker pull lmsysorg/sglang:latest-srt`
 - 部分开发 issue 需要不同的镜像，请联系 issue 持有者
 
 ### 4.4 COMMAND
@@ -120,8 +117,6 @@ docker run -it [other OPTIONS] <image-name> bash
 ```
 docker run -p 30000:30000 --env "HF_TOKEN=hf_xxx"[other OPTIONS] <image-name> python3 -m sglang.launch_server [other paras]
 ```
-
-[Ques: 还有啥别的不]
 
 ## 5. 容器管理
 
@@ -167,9 +162,13 @@ notice: COMMAND 运行完毕后容器会自动关闭。
 - `docker rm <container-name>`
 - 或在 docker run 时添加 `--rm`， 容器关闭后会被自动删除
 
+## 6. 镜像构建
 
+TODO
 
+## 7. 镜像上传
 
+TODO
 
 
 

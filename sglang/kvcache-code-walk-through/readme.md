@@ -51,6 +51,7 @@ Let's walk through the sequence in the diagram now.
 The Scheduler continuously calls `recv_requests` to collect newly arrived requests, validate them and place them into the `waiting_queue`. 
 
 In our example, `Req 7` are received and enqueued.
+<!-- SV: The Scheduler listens in `event_loop_normal` and `process_input_requests` where the `_request_dispatcher` decides on how to handle the request. -->
 
 #### 2. **Merge Batches**
 Before form the `cur_batch` for this round, Scheduler would merge the last round's `cur_batch` into `running_batch`. In the diagram, `cur_batch` from last round are shown as `cur_batch(i-1)` and `running_batch` are shown as `running_batch(i-1)`. In our example, `Req 0` and `Req 1` will be merged together into the new `running_batch`. 
@@ -68,10 +69,13 @@ Before form the `cur_batch` for this round, Scheduler would merge the last round
 
 #### 3. **Forming the `new_batch`**:
 The process of forming a `new_batch` consists of three main steps:
+<!-- SV: A new batch is formed after after the Scheduler performed merging in `get_next_batch_to_run` by calling `get_new_batch_prefill`. -->
 
 1. **Reorder Waiting Queue**:
   - The scheduler reorders requests based on its scheduling policy
   - By default, it prioritizes requests with the longest prefix in the radix cache
+<!-- SV: The Scheduler reorders requests based on its `SchedulePolicy`. -->
+<!-- SV: By default we sort requests by longest prefix, for different policies and their implementation please refer to `schedule_policy.py` -->
 
 2. **Request Selection**:
   - Requests are selected one by one from the reordered queue
@@ -85,15 +89,18 @@ The process of forming a `new_batch` consists of three main steps:
   Allocateing spaces in `req_to_token_pool` and `token_to_kv_pool` for the `new_batch` requests
   - If no `new_batch` can be formed, the scheduler will fallback to use `running_batch` as `cur_batch`, it will firstly remove finished requests like `Old Finished Req`. 
   - If GPU memory becomes insufficient, some decoding requests may be retracted according to the retraction policy. In our example, `Req 0` is retracted during this process.
+<!-- SV: After determination of the `new_batch` inside `get_new_batch_prefill` we `prepare_for_extend`. -->
 
 #### 4. **Running the Batch**: 
 Once the **Global Batch** is determined, `run_batch` is called to run a forward pass.
+<!-- SV: In `event_loop_overlap` after determination of the `batch`, `run_batch` is called to forward pass the `batch`. -->
 
 #### 5. **Result Processing**:
 After `run_batch`, the Scheduler calls `process_batch_result` to to determine which requests have finished and which continue. In our example, `Req 6` is finished and turns grey, `Req 5b` remains unfinished.
 
 #### 6. **Iteration**:
 The loop repeats until all requests are eventually completed. If insufficient memory is encountered, requests may be chunked (in prefill) or retracted (in decode), then reinserted into the waiting queue for later processing.
+<!-- SV: `event_loop_overlap` keeps running until the `last_batch` is processed. -->
 
 ## A Request's Lifecycle
 This section zoom into one request's lifecycle, we would step-by-step walkthrough the key functions that updates the KV Cache & Memory Pools.
@@ -113,7 +120,7 @@ A map from a request to its tokens' KV cache indices.
     - Dim0: `req_pool_indices` identify the specific request
     - Dim1: token positions in req (starting from 0, 1, 2...), identify the specific token in the request
     - Value: `out_cache_loc` for token, it points to the KV cache indices associated with the token identified by Dim0 and Dim1
-  
+<!-- SV: To make connection to the above more clear it could be benefical to point out that this is updated in  `get_next_batch_to_run -->
 #### `token_to_kv_pool`
 `req_to_token_pool` maintained the map between request to tokens KV cache indices, `token_to_kv_pool` further maps token from its KV cache indices to its real KV cache data.  Note that, for different attention implementation, like [`MHA`](https://arxiv.org/abs/1706.03762), [`MLA`](https://arxiv.org/abs/2405.04434), [`Double Sparsity`](https://arxiv.org/abs/2408.07092), `token_to_kv_pool` could have different implementation.
 - **Layout:** Number of Layers * Max Allowed Tokens Number * Number of Head * Head Dimension
@@ -160,6 +167,7 @@ Run `forward_extend` on the current batch, this will eventually invoke the Atten
 - Run forward attention calculation, the input would be
   - Q = extend tokens, in our example token B, C
   - KV = All cached tokens from `req_to_token_pool` by `out_cache_loc` including A(prefix tokens), B, C(extend tokens) (Function `create_flashinfer_kv_indices_triton`).
+<!-- SV: Trace the way to `forward_extend` more clearly, i.e. `self.tp_worker.forward_batch_generation` to `self.model_runner.forward` to `self.forward_extend` -->
 
 ##### Step 3. Function `process_batch_result_prefill`
   `cache_finished_req` and `cache_unfinished_req` are responsible for managing the KV cache in Radix Cache, ReqToTokenPool, and TokenToKVPool.
@@ -176,6 +184,7 @@ Run `forward_extend` on the current batch, this will eventually invoke the Atten
       - Allocate (batch size * 1) slot to `out_cache_loc` because we only generate one token for each batch in decode mode
       - For example: in above diagram, the round that generate D from C
         - We will allocate 1 slots to `out_cache_loc` for token D
+<!-- SV: Maybe mention dynamic changing of the forward mode? -->
 
 ##### Step 5. Function `run_batch`
 Run `forward_decode` on the current batch, this will eventually invoke the Attention Backend, who is responsible for 
@@ -185,6 +194,7 @@ Run `forward_decode` on the current batch, this will eventually invoke the Atten
 - Run forward, the input would be:
   - Q = decode token, in our example token D
   - KV = All cached tokens from `req_to_token_pool` by `out_cache_loc` including A, B, C(from previous round), D (Function `create_flashinfer_kv_indices_triton`)
+<!-- SV: See above comment for run_batch -->
 
 ##### Step 6. Function `process_batch_result_decode`
   If the request is finished, invoke `cache_finished_req` (refer to [this secion](#radixcache-cache_finished_req--cache_finished_req) for details of `cache_finished_req` ). No operation for cache is needed for unfinished request in decode phase.
@@ -231,3 +241,5 @@ To prevent unintended deletion of active cache nodes. Keeping a lock on a node s
 1. When a request `req` is completed, its `token_ids` are stored in the **Radix Cache**. Update Radix Cache 
 2. **Release** redundant **KV Cache space** in `token_to_kv_pool` (removing duplicates) by marking the KV indices as free slots.
 3. **Release `req_to_token_pool`** and **update `tree_cache`**.  
+
+<!-- SV: Point the interested reader to the relevant code section radix_cache.py so he can take a look for him/her self.>
