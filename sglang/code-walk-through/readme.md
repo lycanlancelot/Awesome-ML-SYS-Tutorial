@@ -92,6 +92,9 @@ The Server employs a FastAPI app to define API endpoints, forwarding [`/v1/chat/
 
 ## Scheduler Receive Requests and Process Batches
 
+Here is the overview of the Scheduler:
+![sglang_scheduler](./sglang_scheduler.svg)
+
 [Scheduler](https://github.com/sgl-project/sglang/blob/f8b0326934bacb7a7d4eba68fb6eddebaa6ff751/python/sglang/srt/managers/scheduler.py#L97) runs as Server's subprocess, initialized via `run_scheduler_process` and executes its infinite event loop with `event_loop_normal` or `event_loop_overlap`.
 
 ### [Initialization](https://github.com/sgl-project/sglang/blob/f8b0326934bacb7a7d4eba68fb6eddebaa6ff751/python/sglang/srt/managers/scheduler.py#L97)

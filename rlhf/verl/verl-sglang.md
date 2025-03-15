@@ -158,9 +158,7 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 bash examples/ppo_trainer/test_sglang.sh
 ```
 
-## 8 卡对拍 SGLang 和 vLLM
-
-### SGLang
+## 8 卡测试 SGLang
 
 准备一台 8 卡机器，注意对拍默认会使用 `wandb` 和环境变量 `WANDB_API_KEY` 记录训练 metrics。8 x H100 上耗时约 4h。
 
@@ -178,9 +176,13 @@ function now() {
 可以直接运行来进行对拍：
 
 ```bash
+python3 examples/data_preprocess/gsm8k.py
+python3 examples/data_preprocess/math_dataset.py
 mkdir log
 bash examples/ppo_trainer/rollout_callibration.sh sglang $(now)
 ```
+
+<!--
 
 ### vLLM
 
@@ -204,27 +206,4 @@ python3 -m uv pip install flash-attn --no-build-isolation
 mkdir log
 bash ~/verl-sglang/examples/ppo_trainer/rollout_callibration.sh vllm $(now)
 ```
-
-<!-- ## 和vLLM采样对齐  
-目前使用SGLang时会出现第一个iter开始score就非常低的现象，下图是在gsm8k上进行对拍的结果，其中两条高的线是vllm，剩下的是SGLang
-![image](https://github.com/user-attachments/assets/e7d8c370-a9b6-40c7-85ba-c06ff1228592)、
-
-初步排查原因是validation采样时对参数update失败，同时repetation penalty默认值和vllm不同。更新后得到上图的黄色曲线，可以看到稍好了一点，但没解决问题。  
-
-从表现上看，目前的采样方案SGLang会输出更长的response，下图是和vllm的response mean相比，可以看到平均输出长了一倍
-![image](https://github.com/user-attachments/assets/467ef4a8-363f-41c4-9acf-d27e740a8576)
-
-
-<details>
-<summary>捕获的vllm和sglang分别调用generate接口时使用的采样参数，validation时==!do_sample，使用greedy即temperature=0</summary>
-Vllm:  
-  
-do_sample: SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=1.0, top_p=1, top_k=-1, min_p=0.0, seed=None, stop=[], stop_token_ids=[], bad_words=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=4096, min_tokens=0, logprobs=1, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None, guided_decoding=None)  
-
-!do_sample: SamplingParams(n=1, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0, temperature=0, top_p=1.0, top_k=-1, min_p=0.0, seed=None, stop=[], stop_token_ids=[], bad_words=[], include_stop_str_in_output=False, ignore_eos=False, max_tokens=4096, min_tokens=0, logprobs=1, prompt_logprobs=None, skip_special_tokens=True, spaces_between_special_tokens=True, truncate_prompt_tokens=None, guided_decoding=None)
-
-SGLang:  
-do_sample: {'n': 1, 'max_new_tokens': 4096, 'temperature': 1.0, 'top_k': -1, 'top_p': 1, 'ignore_eos': False, 'repetition_penalty': 1.0}  
-
-!do_sample: {'n': 1, 'max_new_tokens': 4096, 'temperature': 0, 'top_k': -1, 'top_p': 1.0, 'ignore_eos': False, 'repetition_penalty': 1.0}  
-</details> -->
+-->

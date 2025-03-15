@@ -91,6 +91,9 @@ Server 使用 FastAPI 应用定义 API endpoint，通过 [v1_chat_completions](h
 
 ## Scheduler 接收请求以及处理批次 (Scheduler Receive Requests and Process Batches)
 
+这张图给出了 Scheduler 的概览：
+![sglang_scheduler](./sglang_scheduler.svg)
+
 [Scheduler](https://github.com/sgl-project/sglang/blob/f8b0326934bacb7a7d4eba68fb6eddebaa6ff751/python/sglang/srt/managers/scheduler.py#L97) 作为 Server 的子进程运行，通过 `run_scheduler_process` 初始化，并通过 `event_loop_normal` 或 `event_loop_overlap` 执行无限的事件循环。
 
 ### [Initialization](https://github.com/sgl-project/sglang/blob/f8b0326934bacb7a7d4eba68fb6eddebaa6ff751/python/sglang/srt/managers/scheduler.py#L97)
