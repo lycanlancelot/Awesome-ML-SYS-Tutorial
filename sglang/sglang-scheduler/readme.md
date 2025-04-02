@@ -2,11 +2,13 @@
 
 ## [English version](./readme.md) | [简体中文](./readme-CN.md)
 
+> About the Author: Hi, I'm Guanhua Wang, a second-year Master's student in Computer Science at UESTC. I'm currently seeking an internship in inference acceleration. Feel free to get in touch at [281484683@qq.com](mailto:281484683@qq.com)!
+
 The Scheduler structure is located in the file python/sglang/srt/managers/scheduler.py of the SGLang project, and it serves as the core of SGLang scheduling. It receives numerous inference requests from the tokenizer, selects a batch of requests for execution, and is responsible for the following data flow overview:
 
 ```python
 recv_from_tokenizer -> batch -> schedule
-    -> forward -> get_forward_res ->send_to_detokenier
+    -> forward -> get_forward_res ->send_to_detokenizer
 ```
 
 The Scheduler receives numerous inference requests from the tokenizer, but our GPU memory is limited, and we cannot run all requests simultaneously. Therefore, with GPU memory as a constraint, we aim to maximize memory utilization and select as many runnable requests as possible from the received inference requests.
@@ -15,20 +17,20 @@ Since this structure has many functions and fields, and some code effects are su
 
 So, how do we maximize memory utilization? We can start from the following aspects:
 
-- Continue Batch: Dynamically build scheduling batches to improve throughput. In traditional LLM inference batch processing systems, a decode batch must wait for all requests to complete (i.e., infer a stop token) before returning and scheduling the next batch. This approach is obviously not efficient enough. For example:
+- Continuous Batching: Dynamically build scheduling batches to improve throughput. In traditional LLM inference batch processing systems, a decode batch must wait for all requests to complete (i.e., infer a stop token) before returning and scheduling the next batch. This approach is obviously not efficient enough. For example:
 
   > For two requests - asking an LLM about Tang Dynasty history and asking about today's weather in Chengdu, clearly the Chengdu weather can return after just a few tokens, while the Tang Dynasty history will output a large number of tokens. We don't need to wait for the LLM to finish inferring Tang Dynasty history before returning the Chengdu weather along with Tang Dynasty history in the same batch.
 
-  Continue Batch was proposed by Orca, with the idea of dynamically constructing batches: for requests in a batch, if a request is completed, remove it from the batch and return it; if new requests arrive, decide whether to add them based on GPU resource status. In SGLang, dynamic addition of requests is implemented in the `get_next_batch_to_run` function, while dynamic removal is completed in the `process_batch_result` function.
+  Continuous Batching was proposed by Orca, with the idea of dynamically constructing batches: for requests in a batch, if a request is completed, remove it from the batch and return it; if new requests arrive, decide whether to add them based on GPU resource status. In SGLang, dynamic addition of requests is implemented in the `get_next_batch_to_run` function, while dynamic removal is completed in the `process_batch_result` function.
 - Page Attention: For a request, traditional batch processing systems directly allocate KV cache space according to the model's `max_length`. For example, when using the llama3-70B-8k model, a simple weather query request would pre-allocate 200GB of memory, which is clearly wasteful! Page Attention was proposed by VLLM. We can borrow the page table concept from operating systems. To solve the large amount of internal fragmentation waste in pre-allocated memory, we use a mapping to dynamically allocate the KV cache needed for the current request, rather than pre-allocating.
   SGLang uses `ReqToTokenPool` and `TokenToKVPool` to implement this dynamic mapping mechanism.
 - Radix Attention: Different requests may share the same prefix. For tokens with the same content and position encoding, there is no need to repeatedly calculate the KV cache of their prefix. For example, AI agents for multiple users may share the same prompt prefix. We only need to calculate the KV cache of the same prefix once, and then other users can reuse this prefix, without each user's request calculating independently.
-- Radix cache aware scheduling: Since requests may reuse the same prefix, the more requests with the same prefix we select during scheduling, the higher the GPU resource utilization. Therefore, we can sort requests according to the longest prefix matching principle, prioritizing requests with the longest matches to join the batch.
+- Radix cache aware scheduling: Since requests may reuse the same prefix, selecting more requests with the shared prefixes increases GPU resource utilization. Therefore, we can sort requests according to the longest prefix matching principle, prioritizing requests with the longest matches to join the batch.
 - Inference "congestion avoidance": Similar to TCP congestion avoidance mechanism's dynamic adjustment strategy, which gradually increases the congestion window to probe the network's limit, the Scheduler implements a similar approach through the `new_token_ratio` and `new_token_ratio_decay` fields to probe the GPU's limit. When a batch executes successfully, the Scheduler gradually increases the scale of the next batch to achieve higher throughput; when a batch fails, the Scheduler reduces the scale of the next batch to avoid resource overload. This dynamic adjustment mechanism not only approximates the maximum utilization of GPU memory but also ensures relatively stable inference performance.
 
 Through these basic optimization strategies, SGLang significantly improves the efficiency and performance of the inference system while maximizing GPU memory utilization. Next, let's look at how each strategy is implemented.
 
-## ContinueBatch
+## Continuous batching
 
 SGLang dynamically adds requests to batches through the `get_next_batch_to_run` function, and processes the dynamic exit of requests through the `process_batch_result` function. Its core process is as follows:
 
@@ -64,7 +66,7 @@ This function has a two-level memory eviction mechanism to ensure it can allocat
   - Priority is given to evicting requests with few output_ids: The assumption is that the more tokens generated, the easier it is to finish. Early completion leads to early resource release.
   - If output_ids are the same, release reqs with more origin_input_ids: The assumption is that the more `origin_input_ids`, the more tokens need to be generated, so these requests are prioritized for eviction.
 
-After memory detection is completed, we allocate the cache space needed for this batch in the `prepare_for_decode` function (i.e., allocate cache space and set the batch's out_cache_loc field), and implement the autoregressive nature of the transformer through _self_`.input_ids = ` _self_`.output_ids`.
+After memory detection is completed, we allocate the cache space needed for this batch in the `prepare_for_decode` function (i.e., allocate cache space and set the batch's out_cache_loc field), and implement the autoregressive nature of the transformer through `self.input_ids` =  `self.output_ids`.
 
 ### Dynamic Request Exit
 
@@ -119,20 +121,20 @@ Because we've implemented paged attention, we can naturally reuse previously cal
 
 This scheduling adjustment is currently only seen in SGLang. Let me first explain why it's implemented this way.
 
-Before adding inference requests, PrefillAdder first calculates the memory resources already occupied in the system, `rem_total_token_offset`. For tokens that haven't been generated yet by a request, we also need to calculate their future cost and reserve space to ensure that the request can complete inference smoothly. However, during execution, the request may not infer all the way to `max_token_length`, and while the current request is running, other requests may dynamically enter and exit. If we rigidly fix the cost of unregenerated request tokens, it would greatly limit the scheduler's flexibility.
+Before adding inference requests, PrefillAdder first calculates the memory resources already occupied in the system, `rem_total_token_offset`. For tokens that haven't been generated yet by a request, we also need to calculate their future cost and reserve space to ensure that the request can complete inference smoothly. However, during execution, the request may not infer all the way to `max_token_length`, and while the current request is running, other requests may dynamically enter and exit. If we rigidly fix the cost of ungenerated request tokens, it would greatly limit the scheduler's flexibility.
 
-When calculating the cost of unregenerated tokens, PrefillAdder multiplies it by `new_token_ratio` to reduce its weight. Typically, this ratio is less than 1, meaning that unregenerated tokens don't need as much reserved space. The code is as follows:
+When calculating the cost of future tokens, PrefillAdder multiplies it by `new_token_ratio` to reduce its weight. Typically, this ratio is less than 1, meaning that future tokens don't need as much reserved space. The code is as follows:
 
 ```python
-if _running_batch_ is not None:
-    _self_.rem_total_token_offset += sum(
+if running_batch is not None:
+    self_.rem_total_token_offset += sum(
         [
             min(
                 (r.sampling_params.max_new_tokens - len(r.output_ids)),
                 CLIP_MAX_NEW_TOKENS_ESTIMATION,
             )
-            * _self_.new_token_ratio  
-            for r in _running_batch_.reqs
+            * self_.new_token_ratio  
+            for r in running_batch.reqs
         ]
     )
 ```

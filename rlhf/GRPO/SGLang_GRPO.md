@@ -1,36 +1,42 @@
 # GRPO
 
-Group Relative Policy Optimization `grpo`,  a variant of Proximal Policy Optimization(PPO), enhances mathematical reasoning abilities while concurrently optimizing the memory usage of PPO. TRL supports the [GRPO Trainer](https://huggingface.co/docs/trl/main/en/grpo_trainer) for training language models, whose GRPO Trainer also functions in the repo of Open-R1. This doc will first introduce how GRPO works and then show how we add SGLang as an alternative inference backend.
+Group Relative Policy Optimization `grpo`,  a variant of Proximal Policy Optimization(PPO), enhances mathematical reasoning abilities while concurrently optimizing the memory usage of PPO. This doc will first introduce how GRPO works and then show how we add SGLang as an alternative inference backend for TRL, specifically the [GRPO Trainer](https://huggingface.co/docs/trl/main/en/grpo_trainer), which also functions in the [Open-R1](https://github.com/huggingface/open-r1) project.
 
 # 1. How GRPO works
 
 Compared with PPO, GRPO doesn’t have the **value/critic model** to estimate total value. The algorithm computes the normalized reward for each output to derive advantages and updates the **reward model** to enhance training performance.
 
-GRPO is composed of four parts:
+这里说的 update，是指参数更新么？应该不是吧，所以这里的 update 是什么意思？
+
+GRPO is composed of four steps:
 
 - Generating completions
 - Computing the advantage
 - Estimating the KL divergence
 - Computing the loss
 
-    ![Screenshot 2025-02-17 at 3.41.27 PM.png](GRPO_Images/GRPO_overall_arch.png)
+<div align="center">
+<img src="GRPO_Images/grpo-main.png" width="100%">
+</div>
 
 
 ## 1.1 Generating completions
 
-At each training step, we sample a batch of prompts and generate a set of $G$ completions for each prompt (denoted as $o_i$).
+At each training step, we sample a batch of prompts and generate a set of $G$ completions for each prompt (denoted as $o_{i = 1, 2, ..., G}$).
 
 ## 1.2 Computing the advantage
 
 For each of the $G$ sequences, we compute the reward using a **reward model**. To align with the comparative nature of reward models—typically trained on datasets of comparisons between outputs for the same question—the advantage is calculated to reflect these relative comparisons. It is normalized as follows:
 
-![Screenshot 2025-02-17 at 10.54.25 PM.png](GRPO_Images/normalized_advantages.png)
+$$\hat{A}_{i,t} = \frac{r_i - \text{mean}(r)}{\text{std}(r)}$$
 
-This approach gives the method its name: **Group Relative Policy Optimization (GRPO)**.
+This approach gives the method its name: **Group Relative Policy Optimization (GRPO)**, since it uses the relative reward to compute the advantage.
 
-Hugging Face uses the above equation to compute advantages. In the paper, the author named it Outcome Supervision RL with GRPO. The author also found another method named Process Supervision RL with GRPO.
+Hugging Face uses the above equation to compute advantages. In [GRPO paper](https://arxiv.org/abs/2402.03300), the author named it Outcome Supervision RL with GRPO. The author also found another method named Process Supervision RL with GRPO.
 
-We can also leverage the information in each step. Formally, given the question *q* and *G* sampled outputs {$o_1$, $o_2$, … , $o_G$}, a process reward model is R = {{$r_1^{index(1)}$, …, $r_1^{index(K_1)}$}, … , {$r_G^{index(1)}$, …, $r_G^{index(K_G)}$}}, where *index(j)* is the end token index of *j*-th step.
+什么是 Supervision RL？什么是 Process Supervision RL？
+
+We can also leverage the information in each step. Formally, given the question *q* and *G* sampled outputs {$o_1$, $o_2$, … , $o_G$}, a process reward model is R = {{$r_1^{index(1)}$, …, $r_1^{index(K_1)}$}, … , {$r_G^{index(1)}$, …, $r_G^{index(K_G)}$}}, where  $index(j)$ is the end token index of $j$-th step.
 
 Normalize each reward:
 
@@ -44,17 +50,25 @@ $$
 \hat{A}_{i,t} = \sum_{index(j)\geq t}\tilde r_i^{index(j)}
 $$
 
+所以说 advantage 可以是 step wised 的，也可以是 output wised 的么？
+
 ## 1.3 Estimating the KL divergence
 
 KL divergence is estimated using the approximator, which is defined as follows:
 
-![Screenshot 2025-02-17 at 10.57.14 PM.png](GRPO_Images/KL_Divergence.png)
-
+$$
+\mathrm{D}_{\mathrm{KL}}[\pi_{\theta}||\pi_{\mathrm{ref}}] = \frac{\pi_{\mathrm{ref}}(O_{i,t} \mid q, O_{i,<t})}{\pi_{\theta}(O_{i,t} \mid q, O_{i,<t})} - \log \frac{\pi_{\mathrm{ref}}(O_{i,t} \mid q, O_{i,<t})}{\pi_{\theta}(O_{i,t} \mid q, O_{i,<t})} - 1
+$$
+r
 ## 1.4 Computing the loss
 
 The objective is to **maximize the advantage** while ensuring that the model **remains close to the reference policy**. Consequently, the loss is defined as follows:
 
-![Screenshot 2025-02-17 at 11.03.13 PM.png](GRPO_Images/GRPO_Loss_simplified.png)
+The objective is to maximize the advantage while ensuring that the model remains close to the reference policy. Consequently, the loss is defined as follows:
+
+$$
+\mathcal{L}_{\text{GRPO}}(\theta) = -\frac{1}{G} \sum_{i=1}^{G} \frac{1}{|o_i|} \sum_{t=1}^{|o_i|} \left[ \frac{\pi_{\theta}(O_{i,t} \mid q, O_{i,<t})}{\pi_{\text{ref}}(O_{i,t} \mid q, O_{i,<t})} \right]_{\text{no_grad}} \hat{A}_{i,t} - \beta \mathrm{D}_{\mathrm{KL}}[\pi_{\theta}||\pi_{\mathrm{ref}}],
+$$
 
 - the first term represents the scaled advantage
 - the second term penalizes deviations from the reference policy through KL divergence.

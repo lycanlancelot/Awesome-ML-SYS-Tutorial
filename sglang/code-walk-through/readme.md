@@ -49,7 +49,7 @@ All the discussions are based on release [v0.4.0](https://github.com/sgl-project
 1. Radix Cache Management with Attention Backend.
 2. `get_next_batch_to_run`: How to fetch and write KV cache for requests in each batch.
 3. `get_model_worker_batch`.
-4. `write_req_to_token_pool_trition`.
+4. `write_req_to_token_pool_triton`.
 5. CUDA Graphs for Attention Backend.
 6. Overlapping scheduling.
 

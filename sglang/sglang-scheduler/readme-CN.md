@@ -1,10 +1,12 @@
 # scheduler 整体概览
 
+> 关于作者：我是王冠骅，电子科技大学计算机本硕研二(26毕业)，目前在找推理加速方向的实习，欢迎联系我！[281484683@qq.com](mailto:281484683@qq.com)
+
 Scheduler结构体位于sglang工程文件夹的`python/sglang/srt/managers/scheduler.py`中，是SGLang调度的核心。其从 tokenizer 接受大量的推理请求，选出一批请求来进行执行，负责的数据链路概览如下：
 
 ```python
 recv_from_tokenizer -> batch -> schedule
-    -> forward -> get_forward_res ->send_to_detokenier
+    -> forward -> get_forward_res ->send_to_detokenizer
 ```
 
 Scheduler接收来自 tokenizer 的大量推理请求，但我们的 GPU 显存有限，无法同时运行所有请求。因此，我们**以 GPU 显存为约束**，力图**最大化显存利用率**，并从收到的推理请求中尽可能多的选出一批可运行请求。
@@ -13,11 +15,11 @@ Scheduler接收来自 tokenizer 的大量推理请求，但我们的 GPU 显存�
 
 那么，如何最大化显存利用率呢？可以从以下几个方面入手：
 
-- Continue Batch：动态的构建调度 batch，提高吞吐率。传统 LLM 推理批处理系统中，一个 decode batch 必须等待所有请求完成（即推理出停止符）后才能返回并调度下一个 batch。这种方式显然不够高效。例如：
+- Continuous Batching：动态的构建调度 batch，提高吞吐率。传统 LLM 推理批处理系统中，一个 decode batch 必须等待所有请求完成（即推理出停止符）后才能返回并调度下一个 batch。这种方式显然不够高效。例如：
 
   > 让 LLM 讲隋唐历史和问 LLM 今天成都的天气两个请求，明显成都天气几个 token 说完就可以返回了，而隋唐历史要输出大量 token。我们没必要等 LLM 推理完隋唐历史再让成都天气和跟隋唐历史在一批内同时返回。
 
-  Continue Batch 由 Orca 提出，思想是动态的构建 batch：对于 batch 中的请求，如果有请求完成，就将其移除 batch 并返回，如果有新的请求到来，根据 GPU 资源状态决定是否将其加入。在 SGLang 中，请求的动态加入在 `get_next_batch_to_run` 函数中实现；而请求的动态移除在 `process_batch_result` 函数中完成。
+  Continuous Batching 由 Orca 提出，思想是动态的构建 batch：对于 batch 中的请求，如果有请求完成，就将其移除 batch 并返回，如果有新的请求到来，根据 GPU 资源状态决定是否将其加入。在 SGLang 中，请求的动态加入在 `get_next_batch_to_run` 函数中实现；而请求的动态移除在 `process_batch_result` 函数中完成。
 - Page Attention：对于一个请求，传统批处理系统直接按照模型的 `max_length` 来分配 KVcache 的空间。例如，使用 llama3-70B-8k 模型时，一个简单的天气查询请求就会预分配 200G 显存，这显然造成了大量浪费！Page Attention 由 VLLM 提出，我们可以借鉴 OS 中的页表思想，为了解决预分配显存中存在的大量内碎片浪费，利用一个映射，动态的分配当前这个请求需要的 KV cache，而不做提前分配。
   SGLang 使用 `ReqToTokenPool` 和 `TokenToKVPool` 来实现这个动态映射机制。
 - Radix Attention：不同请求之间可能存在相同的前缀。对于内容相同且位置编码一致的 token，无需重复计算其前缀的 KVcache。例如，多个用户的 AI agent 可能共享相同的 prompt 前缀，我们只需要计算一遍相同前缀的 KVcache 就行，然后其他用户复用这个前缀，不需要每个用户的请求都独立计算一遍。
@@ -122,15 +124,15 @@ PrefillAdder 在添加推理请求之前会先计算目前系统内已经被占�
 PrefillAdder 在计算未生成 token 的开销时，会将其乘以 `new_token_ratio` 来降低其比重，通常这个 ratio 小于 1，意味着未生成的token不需要留那么多空间。代码如下：
 
 ```python
-if _running_batch_ is not None:
-    _self_.rem_total_token_offset += sum(
+if running_batch is not None:
+    self.rem_total_token_offset += sum(
         [
             min(
                 (r.sampling_params.max_new_tokens - len(r.output_ids)),
                 CLIP_MAX_NEW_TOKENS_ESTIMATION,
             )
-            * _self_.new_token_ratio  
-            for r in _running_batch_.reqs
+            * self.new_token_ratio  
+            for r in running_batch.reqs
         ]
     )
 ```

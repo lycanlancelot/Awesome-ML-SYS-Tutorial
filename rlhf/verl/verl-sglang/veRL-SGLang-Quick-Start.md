@@ -20,7 +20,7 @@ output = "The total ratio representing the ingredients she used to make the coff
 
 接着将 GSM8K 的数据预处理为 `parquet` 格式：
 
-```shell
+```bash
 python3 examples/data_preprocess/gsm8k.py --local_dir ~/data/gsm8k
 ```
 
@@ -28,7 +28,7 @@ python3 examples/data_preprocess/gsm8k.py --local_dir ~/data/gsm8k
 
 **启动训练**：使用如下shell代码启动PPO训练：
 
-```shell
+```bash
 CUDA_VISIBLE_DEVICES=7 PYTHONUNBUFFERED=1
 python3 -m verl.trainer.main_ppo \
   data.train_files=$HOME/data/gsm8k/train.parquet \

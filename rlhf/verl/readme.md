@@ -72,7 +72,7 @@ PS：之前也有基于 nemo-aligner 和 OpenRLHF 做一些解析，欢迎大家
 
 这一部分记录一些 placement 的经验。希望以后我能有实力基于机器的物理属性直接分析得到这些结论。主要对比这四种策略：
 
-![](./placement.png)
+![](./img/placement.png)
 
 1. fully collocate：所有的子模块都放在同一个资源组上，也即 DeepSpeed-Chat。
 2. hybrid：actor 的 rollout engine 和 training engine 放在同一个资源组上，其他子模块进行部分 collocate，这是 veRL 所提出的策略，但是 veRL 原文其实给出了一个搜索方法，能够贪心搜索所有的策略，选择出最佳策略。

@@ -159,7 +159,7 @@ $$
 
 ### 贝尔曼期望方程
 
-基于此，我们继续推导贝尔曼期望方程（Bellman Expectation Equation）：
+基于此，我们继续推导贝尔曼期望方程（Bellman Expectation Equation），看着很复杂，其实就是基于基础定义相互展开：
 
 $$
 V^{\pi}(s) = \mathbb{E}_{\pi}[R_t + \gamma V^{\pi}(S_{t+1})|S_t = s] \\

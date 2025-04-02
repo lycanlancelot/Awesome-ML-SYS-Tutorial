@@ -209,7 +209,7 @@ This section would go deeper on `cache_finished_req` & `cache_finished_req`'s fl
 |------|--------------------------|--------------------------|
 | **1. Get `kv_indices`** from `req_to_token_pool.req_to_token` | - | - |
 | **2. Update Radix Cache** (`insert()`) | - | - |
-| **3. Free KV Cache** (`self.token_to_kv_pool.free()`) | - | - |
+| **3. Free KV Cache** (`self.token_to_kv_pool.free()`) | - | release duplicate kv cache storage |
 | **4. Handle `req_to_token_pool`** | **Writes and updates** `req_to_token_pool | **Releases** `req_to_token_pool` as the request is completed. |
 | **5. Handle `req.last_node`** | **Increases** the reference count of `req.last_node` | **Decreases** the reference count of `req.last_node`, as `req` is finished. |
 
@@ -241,5 +241,3 @@ To prevent unintended deletion of active cache nodes. Keeping a lock on a node s
 1. When a request `req` is completed, its `token_ids` are stored in the **Radix Cache**. Update Radix Cache 
 2. **Release** redundant **KV Cache space** in `token_to_kv_pool` (removing duplicates) by marking the KV indices as free slots.
 3. **Release `req_to_token_pool`** and **update `tree_cache`**.  
-
-<!-- SV: Point the interested reader to the relevant code section radix_cache.py so he can take a look for him/her self.>

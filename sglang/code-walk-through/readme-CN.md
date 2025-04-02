@@ -45,7 +45,7 @@
 1. 基于 Attention Backend 的 Radix Cache 管理。
 2. `get_next_batch_to_run`：如何为每批次请求提取和写入 KV 缓存。
 3. `get_model_worker_batch`。
-4. `write_req_to_token_pool_trition`。
+4. `write_req_to_token_pool_triton`。
 5. 使用 CUDA Graphs 优化 Attention Backend。
 6. 重叠调度策略（overlap scheduling）。
 

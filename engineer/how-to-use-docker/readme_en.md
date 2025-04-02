@@ -156,3 +156,28 @@ TODO
 ## 7. Uploading Images
 
 TODO
+
+## Use docker in VSCode
+
+Please make sure to install the Devcontainer extension in VSCode.
+
+In the folder you want to open inside the docker container create a folder `.devcontainer`.
+In the `.devcontainer` create a `devcontainer.json` like so:
+
+```
+{
+  "name": "simon",
+  "build": {
+    "dockerfile": "../docker/cuda_new.Dockerfile"
+  },
+  "runArgs": [
+    "--gpus",
+    "device=7"
+  ]
+}
+```
+Make sure to point with the path to the docker file you want to use.
+You can than use 
+`ctrl + shift + p` and type `Devcontainers: Open Folder in Container` and select the folder where you created the subfolder `.devcontainer`. You will be able to use all the features of VSCode while developing inside the container..
+
+For more details see [here](https://code.visualstudio.com/docs/devcontainers/containers).

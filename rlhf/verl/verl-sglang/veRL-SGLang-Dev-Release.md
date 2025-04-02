@@ -142,22 +142,6 @@ sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 60
 sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 60
 ``` -->
 
-## 4 卡测试 PPO 功能
-
-首先构造数据集，默认保存至 `~/data`。
-
-```bash
-python3 examples/data_preprocess/gsm8k.py
-python3 examples/data_preprocess/math_dataset.py
-```
-
-可以在 4 卡 GPU 上直接运行测试 SGLang 的 PPO 功能：
-
-```bash
-export CUDA_VISIBLE_DEVICES=0,1,2,3
-bash examples/ppo_trainer/test_sglang.sh
-```
-
 ## 8 卡测试 SGLang
 
 准备一台 8 卡机器，注意对拍默认会使用 `wandb` 和环境变量 `WANDB_API_KEY` 记录训练 metrics。8 x H100 上耗时约 4h。
