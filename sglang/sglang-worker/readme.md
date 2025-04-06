@@ -532,7 +532,7 @@ class LoadBalanceMethod(Enum):
 - Distribute requests among DP workers
 - Dynamically adjust workload
 
-The current DP router implementation is still naive, but more efficient cache-aware DP scheduling will be implemented later, please see [rust router](https://github.com/sgl-project/sglang/tree/main/rust).
+The current DP router implementation is still naive, but more efficient cache-aware DP scheduling will be implemented later, please see [rust router](https://github.com/sgl-project/sglang/tree/main/sgl-router).
 
 3. **Inter-process Communication**
 

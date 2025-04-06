@@ -538,7 +538,7 @@ class LoadBalanceMethod(Enum):
 - 动态调整工作负载
 
 
-目前 DP  router 的实现还很 naive，但是之后会实现更高效的 cache aware DP scheduling，敬请参见 [rust router](https://github.com/sgl-project/sglang/tree/main/rust)。
+目前 DP  router 的实现还很 naive，但是之后会实现更高效的 cache aware DP scheduling，敬请参见 [rust router](https://github.com/sgl-project/sglang/tree/main/sgl-router)。
 
 3. **进程间通信**
 

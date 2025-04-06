@@ -51,4 +51,24 @@ $$ \lambda = 0.5 - \frac{\text{len}(i) - \text{min\_len}}{\text{max\_len} - \tex
 1. Classic RM：参考 InstructGPT，作者实现了一个基于 value-head 的奖励模型，并收集了约 80 万个数据点进行微调。该模型最终以 question, answer, reference answer 作为输入，输出一个标量，指示响应是否正确。
 2. Chain-of-Thought RM：最近的一些工作证明，加入了 CoT 的 reward model 在需要细微正确性标准的任务上显著更优。作者继续收集了约 80 万个带有 CoT 的数据集来微调 reward model。在与 Classic RM 相同输入的基础上，CoT model 明确生成逐步推理过程，最后以 JSON 格式提供最终的 reward。在作者的手动抽查中，Classic RM 的准确率约为 84.4，而 CoT RM 达到了 98.5 的准确率。最终，他们采用了 CoT RM 以确保更正确的反馈。
 
-视觉强化学习 Vision RL 的数据主要来源于三大类：Real-world data，Synthetic visual reasoning data 以及 Text-rendered data。其中，text-rendered data 颇有意思：将文本内容转换为图片，专门强化模型基于跨模态的文本推理能力。通过将文本文档、代码片段和结构化数据转换为图像，作者格外训练了模型处理文本密集图像的能力。
+Vision RL 的数据主要来源于三大类：Real-world data，Synthetic visual reasoning data 以及 Text-rendered data。其中，text-rendered data 的做法颇有意思，将文本内容转换为图片，专门强调了模型处理文本密集图像的能力。
+
+
+### Long2Short 训练
+
+Long-CoT 模型的推理开销显著更大，作者指出了多种可以将 Long CoT 能力迁移到 Short CoT 上。比如 model merging，shortest rejection sampling，DPO 还有 Long2Short RL。这里首先分享一个最有趣的方法——model merging。非常简单，直接把 long cot 模型和 short cot 模型的参数取平均值，就得到了更好的 short cot 模型。再者，shortest rejection sampling 就是每次从所有正确的 samples 中，选择最短且正确的答案作为最终的 sample。当然，rejection sampling 的另一面就是 DPO，可以把短的错误答案和正确的长答案都作为 negative sample，构造 pairewise preference data。同样，简单的 rejection sampling 也可以广泛用于 math 和 coding 问题上，因为 rule-based verification 往外比起人自身还准确。在 SFT 阶段，作者也利用 rejection sampling 来扩充数据集。
+
+## RL Infra
+
+这是我最感兴趣的部分了，作者在他们的 RL 系统中重点讲述了 partial rollout 这一想法，这是最重要的创新了。
+
+### Partial Rollout
+
+考虑真实场景下的大规模多任务 RL。这些 RL 任务在 rollout 阶段的 decode 长度差距非常大，譬如 reasoning task 可能天然就比选择题需要 decode 的 tokens 多的多的多，然后即便是同一类问题，长文本翻译和短文本翻译需要的 decode 长度也不太一样。为此，进一步考虑一个 PPO iteration，如果我们要获得 128 个 samples 用于这一步的参数更新，我们可以直接从 prompt pool 中采样 128 个 input，然后发送给 rollout engine，让其完整地从 prefill 结束后的第一个 token 开始 decode，直到 128 个 input 都完成 decode。这些 input 可能来自不同任务，其需要的 decode 长度差距很大。假设 rollout engine 具有简单的 routing 分发机制，可能会按照 prefix maxium 的方式，将 128 个 input 分到多个 worker 上，每个 worker 各自完成各自的 decode 任务，最后将结果返回给 PPO 训练。如果一个 request 需要 decode 的内容特别长，那么我们可以想象，其相似 prefix 的 request 可能需要 decode 的内容也特别长。很不巧，按照我们的 routing 策略，这两个 request 很有可能被分到同一个 worker 上。虽然这样的 routing 策略节省了 prefill 开销，但是大量的 long decode request 都发到了同一个 worker 上，这个 worker 事实上会成为所有 rollout workers 中的 bottleneck。
+
+为了解决这个问题，作者提出了他们的 partial rollout 策略，而我在他们的基础上分享一些我听到的可行做法。还是考虑我要 128 个 samples 的场景，首先为这个 128 个 samples 的 expected length 在 iteration t 设定一个阈值 $\text{Sample Range} = L_{t, min}, L_{t, max}$，然后进行超采样，为了得到 128 个 examples，我们实际上输入给 rollout engine 的请求数量为 512 个。超采样的坏处显而易见，毕竟多采样了这么多 examples，速度肯定是变慢的。不过，考虑到 rollout engine 的 batch size 可以非常大，实际上很多 dp worker 分下来，batch size 调大，单个 request 的处理速度不会收到特别大的影响。而且，考虑了 sample range 后，这 512 个 examples 并发同时开始 decode，我们把先在 sample range 内成功 decode 的 request 返回给 PPO 训练，剩下的要么继续 decode（因为 k1.5 的 RL 系统是 rollout 和 training speerate 的，所以在 training 的时候不用回收 rollout engine，所以可以继续 decode），要么就 cache 存下来，这个 iteration 不继续 decode 了。有了这种设计，发挥想象力，在下个 iteration，首先是 policy model 的参数和 sample range 更新了，再者是前一个 iteration 没有在 sample range 内完成 decode 的 request 可以继续 decode，如果成功了，就返回给 PPO 训练，否则还是 cache 存下来。
+
+这个策略确保了每一个 iteration 返回的 samples 的 decode 长度都在 Sample Range 内，对于训练而言是更加稳定的。也能一定程度缓和 rollout engine 的 load balance 问题。在业界的实践看来，是非常实在的方法。然而，我其实想到很多悬而未决的问题：
+
+1. 显然，partial rollout 会破坏 on-policy 属性。很有可能一个 request 再被用于训练时，decode 出来的部分会分 chunk 来自不同的 iteration。比如 0～64k 来自 iteration t-2 ，64k～96k 来自 iteration t-1，而从 96k 开始到结束，才真正来自 iteration t。这在理论上能够证明有相近的效果么？
+2. 没有 decode 结束的 request 会被 cache 下来，但是下一轮显然会加入新的 request。前一轮的 request 已经有相当一部分被 cache 下来，这些新的 request 需要 decode 的量为了达到同样的 sample range，显然是更多的，这样是不是就造就了新的 load unbalance 呢？

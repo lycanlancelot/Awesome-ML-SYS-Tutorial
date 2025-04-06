@@ -19,17 +19,22 @@ docker exec -it {YOUR CONTAINER NAME} /bin/zsh
 ```bash
 apt install python3.10-venv
 
+# 创建 venv
+python3 -m venv .venv --upgrade-deps
+source .venv/bin/activate
+pip install build wheel
+
+# 安装 SGlang
+git clone -b v0.4.4.post3 https://github.com/sgl-project/sglang.git
+cd sglang
+pip install --upgrade pip
+pip install -e "python[all]" --find-links https://flashinfer.ai/whl/cu124/torch2.5/flashinfer-python
+
+# 安装 verl
+cd ..
 git clone https://github.com/ocss884/verl.git verl-sglang
 cd verl-sglang
 git switch sglang_multinode
-python3 -m venv .venv --upgrade-deps
-source .venv/bin/activate
-
-# 在 venv 中需要补充安装的依赖
-pip install torch torchvision torchaudio build wheel
-
-# 安装 verl
-pip install ".[sglang]"
 pip install ".[gpu]"
 ```
 
@@ -378,3 +383,23 @@ ulimit soft: 524288
  torchrun --nnodes=1 --nproc_per_node=4 --master_addr=<NODE0 IP> --master_port=34567 torchrun_verlengine.py
  ```
 </details>
+
+- [ ] `[torch_memory_saver.cpp] CUresult error  result=2 file=csrc/torch_memory_saver.cpp func=cu_mem_create line=103` (**5**)
+
+```bash
+ValueError: TP rank 0 could finish the model loading, but there are other ranks that didn't finish loading. It is likely due to unexpected failures (e.g., OOM) or a slow node
+```
+
+ 1. 将`torchrun_verlengine.py`中`== Parallel ==`部分改为
+```
+dp, tp, pp = 1, 8, 1
+device_count = 8
+model_name = "moonshotai/Moonlight-16B-A3B-Instruct"
+```
+
+ 2.运行下面的命令
+ ```bash
+ torchrun --nnodes=1 --nproc_per_node=8 --master_addr=<NODE0 IP> --master_port=34567 torchrun_verlengine.py
+ ```
+
+测试使用的月暗家用了deepseekV3结构的小模型，看起来memory saver和deepseekV3结构存在一定冲突，当前优先级最高的事项
